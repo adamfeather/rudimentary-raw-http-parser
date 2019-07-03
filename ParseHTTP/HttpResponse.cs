@@ -1,4 +1,6 @@
-﻿namespace ParseHTTP
+﻿using System.Collections.Generic;
+
+namespace ParseHTTP
 {
     public class HttpResponse
     {
@@ -76,5 +78,6 @@
 
         public string WWWAuthenticate { get; set; }
 
+        public IEnumerable<byte> Body { get; set; }
     }
 }

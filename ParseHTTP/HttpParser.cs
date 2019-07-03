@@ -8,7 +8,12 @@ namespace ParseHTTP
 {
     public class HttpParser
     {
+        private const int AsciiNewLine = 10;
+        private const int AsciiCarriageReturn = 13;
+
         private readonly string _fileLocation;
+
+        private Queue<int> _previousFourBytes;
 
         public HttpRequest HttpRequest { get; }
 
@@ -16,49 +21,76 @@ namespace ParseHTTP
 
         public HttpParser(string fileLocation)
         {
+            PrimePreviousFourByteQueue();
+
             _fileLocation = fileLocation;
 
-            var (rawRequest, rawResponse) = ExtractRawResponseRequestSections();
+            var (requestBytes, responseHeaderBytes, responseBodyBytes) = ExtractRawResponseRequestSections();
 
-            var requestKeyValues = GetKeyValuesFrom(rawRequest);
+            var requestKeyValues = GetKeyValuesFrom(rawHttp: Encoding.ASCII.GetString(requestBytes.ToArray()));
 
-            var responseKeyValues = GetKeyValuesFrom(rawResponse);
+            var responseHeaderKeyValues = GetKeyValuesFrom(Encoding.ASCII.GetString(responseHeaderBytes.ToArray()));
 
             HttpRequest = MapKeysValuesToProperties<HttpRequest>(requestKeyValues);
 
-            HttpResponse = MapKeysValuesToProperties<HttpResponse>(responseKeyValues);
+            HttpResponse = MapKeysValuesToProperties<HttpResponse>(responseHeaderKeyValues);
+
+            HttpResponse.Body = responseBodyBytes;
         }
 
-        private (StringBuilder rawRequest, StringBuilder rawResponse) ExtractRawResponseRequestSections()
+        private void PrimePreviousFourByteQueue()
         {
-            var rawRequest = new StringBuilder();
-            var rawResponse = new StringBuilder();
+            _previousFourBytes = new Queue<int>();
 
-            var httpBuilders = new[] { rawRequest, rawResponse };
-            int builderIndex = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                _previousFourBytes.Enqueue(-1);
+            }
+        }
+
+        private (IEnumerable<byte> rawRequest, IEnumerable<byte> rawResponse, IEnumerable<byte> responseBody) ExtractRawResponseRequestSections()
+        {
+            var rawRequest = new List<byte>();
+            var rawResponseHeaders = new List<byte>();
+            var rawResponseBody = new List<byte>();
+
+            var httpBuilder = new[] { rawRequest, rawResponseHeaders, rawResponseBody };
+
+            int currentBuilderIndex = 0;
+
+            var separator = new[] { AsciiCarriageReturn, AsciiNewLine, AsciiCarriageReturn, AsciiNewLine };
 
             using (var fileStream = File.OpenRead(_fileLocation))
-            using (var streamReader = new StreamReader(fileStream))
             {
-                string line;
-                while ((line = streamReader.ReadLine()) != null)
+                int currentByteValue;
+                while ((currentByteValue = fileStream.ReadByte()) != -1)
                 {
-                    httpBuilders[builderIndex].AppendLine(line);
+                    httpBuilder[currentBuilderIndex].Add(Convert.ToByte(currentByteValue));
 
-                    if (line == string.Empty & builderIndex < httpBuilders.Length - 1)
+                    var previousFourBytes = GetPreviousFourBytes(currentByteValue);
+
+                    if (previousFourBytes.SequenceEqual(separator))
                     {
-                        builderIndex++;
+                        currentBuilderIndex++;
                     }
                 }
             }
 
-            return (rawRequest, rawResponse);
+            return (rawRequest, rawResponseHeaders, rawResponseBody);
         }
 
-        private Dictionary<string, string> GetKeyValuesFrom(StringBuilder rawHttp)
+        private IEnumerable<int> GetPreviousFourBytes(int currentByteValue)
+        {
+            _previousFourBytes.Dequeue();
+            _previousFourBytes.Enqueue(currentByteValue);
+
+            return _previousFourBytes.ToArray();
+        }
+
+        private Dictionary<string, string> GetKeyValuesFrom(string rawHttp)
         {
             return
-                rawHttp.ToString()
+                rawHttp
                     .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
                     .Where(rr => rr.Contains(':'))
                     .Select(x => x.Split(':'))

@@ -11,9 +11,9 @@ namespace ParseHTTP
 
             var httpParser = new HttpParser(fileLocation);
 
-            Console.WriteLine($"***Request:\n{JsonConvert.SerializeObject(httpParser.HttpRequest, Formatting.Indented)}\n\n");
+            Console.WriteLine($"Request:\n{JsonConvert.SerializeObject(httpParser.HttpRequest, Formatting.Indented)}\n\n");
 
-            Console.WriteLine($"***Response:\n{JsonConvert.SerializeObject(httpParser.HttpRequest, Formatting.Indented)}\n\n");
+            Console.WriteLine($"Response:\n{JsonConvert.SerializeObject(httpParser.HttpResponse, Formatting.Indented)}\n\n");
         }
     }
 }
